@@ -1,0 +1,16 @@
+name: cache
+version: '1.0.0'
+api: ['1.21.0']
+main: fr.sharkboyph0realc.cache.CachePlugin
+api-version: '1.21'
+author: sharkboyph0realc
+description: Plugin cache-cache
+commands:
+  cache:
+    description: Commande principale du plugin cache-cache
+    usage: /cache
+    permission: cache.admin
+permissions:
+  cache.admin:
+    description: Donne acces a toutes les commandes cache
+    default: op

@@ -1,0 +1,10 @@
+hide-time: 120
+hunt-time: 600
+hunter-pearl-cooldown: 30
+player-pearl-uses: 1
+beep-delay: 30
+beep-sound: BLOCK_NOTE_BLOCK_PLING
+hunter-speed: 1
+hunter-arrows: 20
+hunter-bow-power: 4
+raw-beef: 64
