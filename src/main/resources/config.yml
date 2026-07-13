@@ -19,3 +19,11 @@ hunter-arrows: 20
 hunter-bow-power: 4
 # Quantite de boeuf cru donnee aux caches.
 raw-beef: 64
+
+# --- Border de partie (virtuelle: le monde n'est jamais modifie) ---
+# Distance a laquelle l'ecran rougit a l'approche de la bordure.
+border-warning-distance: 5
+# Marge en blocs avant que la bordure ne fasse des degats.
+border-damage-buffer: 1
+# Degats par seconde et par bloc au-dela de la bordure.
+border-damage-amount: 0.5

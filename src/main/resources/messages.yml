@@ -1,4 +1,16 @@
 prefix: '&8[&6Cache&8] &r'
+
+# --- Titres de fin de partie (pas de prefixe, affiches en gros a l'ecran) ---
+title-victory: '&a&lVICTOIRE'
+title-defeat: '&c&lDEFAITE'
+subtitle-victory-hunters: '&7Vous avez trouve tous les joueurs caches'
+subtitle-defeat-hunters: '&7Temps ecoule: %found% joueur(s) trouve(s) seulement'
+subtitle-victory-hiders: '&7Vous avez survecu jusqu''au bout'
+subtitle-defeat-hiders: '&7Les chasseurs vous ont tous trouves'
+title-end: '&e&lFIN'
+subtitle-end: '&7La partie a ete interrompue'
+
+# --- Chat ---
 no-permission: '&cTu n''as pas la permission.'
 player-only: '&cCette commande est reservee aux joueurs.'
 map-created: '&aMap %map% creee.'

@@ -5,6 +5,7 @@ import fr.sharkboyph0realc.cache.model.MapData;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.sound.Sound;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.title.Title;
 import org.bukkit.Bukkit;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
@@ -28,6 +29,7 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
@@ -37,10 +39,21 @@ import java.util.UUID;
 
 public final class GameManager {
 
-    /** Duree infinie pour un PotionEffect depuis 1.19.4 (Integer.MAX_VALUE deborde a l'affichage). */
+    /** Duree infinie pour un PotionEffect depuis 1.19.4. */
     private static final int INFINITE_DURATION = -1;
     private static final int GLOW_SECONDS = 30;
+
     private static final Key DEFAULT_BEEP_KEY = Key.key("block.note_block.pling");
+    private static final Sound WIN_SOUND = Sound.sound(Key.key("entity.player.levelup"), Sound.Source.MASTER, 1f, 1f);
+    private static final Sound LOSE_SOUND = Sound.sound(Key.key("entity.villager.no"), Sound.Source.MASTER, 1f, 1f);
+
+    private static final Title.Times TITLE_TIMES = Title.Times.times(
+        Duration.ofMillis(400), Duration.ofSeconds(3), Duration.ofSeconds(1));
+
+    /** Camp vainqueur d'une partie. */
+    public enum Winner {
+        HUNTERS, HIDERS, NONE
+    }
 
     private final JavaPlugin plugin;
     private final MessageManager messages;
@@ -56,8 +69,8 @@ public final class GameManager {
     /** Position d'origine des joueurs, restauree en fin de partie. */
     private final Map<UUID, Location> previousLocations = new HashMap<>();
 
-    /** Etat de la worldborder avant la partie, restaure en fin de partie. */
-    private BorderSnapshot borderSnapshot;
+    /** Border virtuelle de la partie : appliquee aux joueurs, jamais au monde. */
+    private WorldBorder gameBorder;
 
     private GameState gameState = GameState.IDLE;
     private BossBar bossBar;
@@ -86,14 +99,6 @@ public final class GameManager {
         return Set.copyOf(designatedHunters);
     }
 
-    public Set<UUID> getActiveHunters() {
-        return Set.copyOf(activeHunters);
-    }
-
-    public Set<UUID> getActiveHiders() {
-        return Set.copyOf(activeHiders);
-    }
-
     public boolean addDesignatedHunter(Player player) {
         return designatedHunters.add(player.getUniqueId());
     }
@@ -118,7 +123,6 @@ public final class GameManager {
         return foundCount;
     }
 
-    /** Les caches ne peuvent utiliser leurs perles que pendant la phase cachette. */
     public boolean canHiderUsePearl(UUID uuid) {
         return gameState == GameState.HIDING && activeHiders.contains(uuid) && !foundHiders.contains(uuid);
     }
@@ -168,7 +172,7 @@ public final class GameManager {
             return false;
         }
 
-        applyWorldBorder(map);
+        createGameBorder(map);
 
         int hideTime = Math.max(1, getInt("hide-time", 120));
         int pearls = Math.max(0, getInt("player-pearl-uses", 1));
@@ -183,6 +187,7 @@ public final class GameManager {
             previousLocations.put(uuid, hider.getLocation());
             preparePlayerForGame(hider);
             hider.teleport(map.getCenter());
+            applyBorder(hider);
             if (beef > 0) {
                 hider.getInventory().addItem(new ItemStack(Material.BEEF, beef));
             }
@@ -200,12 +205,13 @@ public final class GameManager {
             previousLocations.put(uuid, hunter.getLocation());
             preparePlayerForGame(hunter);
             hunter.teleport(map.getWaitingRoom());
+            applyBorder(hunter);
             hunter.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, hideTime * 20 + 40, 0, false, false));
         }
 
         gameState = GameState.HIDING;
         startHidePhaseTimer(map, hideTime);
-        broadcast(messages.get("game-started"));
+        broadcast(messages.prefixed("game-started"));
         return true;
     }
 
@@ -215,23 +221,20 @@ public final class GameManager {
             return;
         }
 
-        broadcast(messages.get("game-stopped"));
-        endGame("winner-draw", true);
+        broadcast(messages.prefixed("game-stopped"));
+        endGame(Winner.NONE, true);
     }
 
-    /** Appele par /cache reload : coupe proprement une partie en cours. */
     public void reloadRuntimeData() {
         if (gameState != GameState.IDLE) {
-            endGame("winner-draw", true);
+            endGame(Winner.NONE, true);
         }
     }
 
-    /** Appele depuis onDisable : on nettoie sans teleporter (le serveur s'arrete). */
+    /** onDisable : on nettoie sans teleporter (le serveur s'arrete). */
     public void shutdown() {
         if (gameState != GameState.IDLE) {
-            endGame("winner-draw", false);
-        } else {
-            restoreWorldBorder();
+            endGame(Winner.NONE, false);
         }
     }
 
@@ -272,6 +275,7 @@ public final class GameManager {
             }
 
             hunter.teleport(map.getHunterSpawn());
+            applyBorder(hunter);
             hunter.removePotionEffect(PotionEffectType.BLINDNESS);
             giveHunterKit(hunter);
         }
@@ -292,24 +296,21 @@ public final class GameManager {
         }, 0L, 20L);
     }
 
-    /**
-     * Temps ecoule : les caches survivants ont gagne.
-     * Si personne n'a ete trouve, on ajoute 30s de glowing avant la fin (spectacle).
-     */
+    /** Temps ecoule : les caches survivants gagnent. Si personne n'a ete trouve, glow final. */
     private void onHuntTimeout() {
         cancelTimerTasks();
 
         if (foundCount == 0) {
             gameState = GameState.ENDING;
-            broadcast(messages.get("time-up-glow"));
+            broadcast(messages.prefixed("time-up-glow"));
             applyGlowingToAll(GLOW_SECONDS * 20);
 
             timeoutTask = Bukkit.getScheduler().runTaskLater(plugin,
-                () -> endGame("winner-hiders", true), GLOW_SECONDS * 20L);
+                () -> endGame(Winner.HIDERS, true), GLOW_SECONDS * 20L);
             return;
         }
 
-        endGame("winner-hiders", true);
+        endGame(Winner.HIDERS, true);
     }
 
     // -------------------------------------------------------- evenements
@@ -329,10 +330,10 @@ public final class GameManager {
 
         player.getInventory().clear();
         player.setGameMode(GameMode.SPECTATOR);
-        broadcast(messages.format("hider-found", Map.of("player", player.getName())));
+        broadcast(messages.prefixed("hider-found", Map.of("player", player.getName())));
 
         if (foundHiders.size() >= activeHiders.size()) {
-            endGame("winner-hunters", true);
+            endGame(Winner.HUNTERS, true);
         }
     }
 
@@ -345,10 +346,10 @@ public final class GameManager {
 
         foundHiders.add(uuid);
         foundCount++;
-        broadcast(messages.format("player-disconnected-found", Map.of("player", player.getName())));
+        broadcast(messages.prefixed("player-disconnected-found", Map.of("player", player.getName())));
 
         if (foundHiders.size() >= activeHiders.size()) {
-            endGame("winner-hunters", true);
+            endGame(Winner.HUNTERS, true);
         }
     }
 
@@ -362,11 +363,11 @@ public final class GameManager {
         }
 
         if (activeHunters.isEmpty()) {
-            endGame("winner-hiders", true);
+            endGame(Winner.HIDERS, true);
         }
     }
 
-    /** Un participant qui se reconnecte retrouve son etat et sa bossbar. */
+    /** Reconnexion en cours de partie : bossbar, gamemode et border reappliques. */
     public void ensurePlayerStateOnJoin(Player player) {
         if (gameState == GameState.IDLE) {
             return;
@@ -381,15 +382,13 @@ public final class GameManager {
             player.setGameMode(GameMode.SPECTATOR);
         }
 
+        applyBorder(player);
+
         if (bossBar != null) {
             bossBar.addPlayer(player);
         }
     }
 
-    /**
-     * Le stock de perles est desormais gere par le jeu lui-meme :
-     * un cache recoit `player-pearl-uses` perles et chaque lancer en consomme une.
-     */
     public boolean onHiderPearlPreUse(Player player) {
         if (!activeHiders.contains(player.getUniqueId())) {
             return true;
@@ -447,40 +446,43 @@ public final class GameManager {
         }
     }
 
-    // ------------------------------------------------------ worldborder
+    // ------------------------------------------------------------- border
 
-    private record BorderSnapshot(String world, Location center, double size) {
-    }
-
-    private void applyWorldBorder(MapData map) {
+    /**
+     * Border VIRTUELLE : on ne touche jamais a la worldborder du monde.
+     * Elle n'est envoyee qu'aux joueurs de la partie et disparait a la fin
+     * (setWorldBorder(null) rend au joueur la bordure normale de son monde).
+     */
+    private void createGameBorder(MapData map) {
         Location center = map.getCenter();
         if (center == null || center.getWorld() == null) {
+            gameBorder = null;
+            plugin.getLogger().warning("Border ignoree: le centre de la map n'a pas de monde valide.");
             return;
         }
 
-        World world = center.getWorld();
-        WorldBorder border = world.getWorldBorder();
+        double size = Math.max(2.0, map.getBorderRadius() * 2.0);
 
-        // Sauvegarde de l'etat AVANT modification, pour pouvoir le restaurer.
-        borderSnapshot = new BorderSnapshot(world.getName(), border.getCenter().clone(), border.getSize());
+        gameBorder = Bukkit.createWorldBorder();
+        gameBorder.setCenter(center);
+        gameBorder.setSize(size);
+        gameBorder.setWarningDistance(Math.max(1, getInt("border-warning-distance", 5)));
+        gameBorder.setDamageBuffer(Math.max(0, getInt("border-damage-buffer", 1)));
+        gameBorder.setDamageAmount(Math.max(0.0, plugin.getConfig().getDouble("border-damage-amount", 0.5)));
 
-        border.setCenter(center);
-        border.setSize(map.getBorderRadius() * 2.0);
+        plugin.getLogger().info("Border de partie: monde=" + center.getWorld().getName()
+            + " centre=" + (int) center.getX() + "," + (int) center.getZ()
+            + " rayon=" + map.getBorderRadius() + " (taille=" + size + ")");
     }
 
-    private void restoreWorldBorder() {
-        if (borderSnapshot == null) {
-            return;
+    private void applyBorder(Player player) {
+        if (gameBorder != null) {
+            player.setWorldBorder(gameBorder);
         }
+    }
 
-        World world = Bukkit.getWorld(borderSnapshot.world());
-        if (world != null) {
-            WorldBorder border = world.getWorldBorder();
-            border.setCenter(borderSnapshot.center());
-            border.setSize(borderSnapshot.size());
-        }
-
-        borderSnapshot = null;
+    private void clearBorder(Player player) {
+        player.setWorldBorder(null);
     }
 
     // ----------------------------------------------------------- joueurs
@@ -608,10 +610,8 @@ public final class GameManager {
     }
 
     /**
-     * Utilise l'API Adventure (cle de son) au lieu de l'enum org.bukkit.Sound :
-     * l'enum a ete convertie en registre dans les versions recentes et
-     * Sound.valueOf(...) casse a l'execution sur ces serveurs.
-     * Les anciens noms (BLOCK_NOTE_BLOCK_PLING) restent acceptes.
+     * Son via l'API Adventure (cle) : l'enum org.bukkit.Sound est devenue un
+     * registre sur les versions recentes et Sound.valueOf casse a l'execution.
      */
     private Sound getBeepSound() {
         String configured = plugin.getConfig().getString("beep-sound");
@@ -625,7 +625,6 @@ public final class GameManager {
 
         String value = configured.trim().toLowerCase(Locale.ROOT);
 
-        // Format moderne : block.note_block.pling ou minecraft:block.note_block.pling
         if (value.indexOf('.') >= 0 || value.indexOf(':') >= 0) {
             try {
                 return Key.key(value);
@@ -635,7 +634,6 @@ public final class GameManager {
             }
         }
 
-        // Format historique : nom d'enum Bukkit.
         try {
             org.bukkit.Sound legacy = org.bukkit.Sound.valueOf(configured.trim().toUpperCase(Locale.ROOT));
             return Key.key(legacy.getKey().toString());
@@ -646,7 +644,7 @@ public final class GameManager {
         }
     }
 
-    // ----------------------------------------------------------- fin de partie
+    // ----------------------------------------------------- fin de partie
 
     private void applyGlowingToAll(int ticks) {
         for (UUID uuid : getAllParticipants()) {
@@ -663,7 +661,7 @@ public final class GameManager {
         return all;
     }
 
-    private void endGame(String winnerMessageKey, boolean restorePlayers) {
+    private void endGame(Winner winner, boolean restorePlayers) {
         if (gameState == GameState.IDLE) {
             return;
         }
@@ -672,7 +670,7 @@ public final class GameManager {
         cancelAllTasks();
         clearBossBar();
 
-        broadcast(messages.get(winnerMessageKey));
+        broadcast(messages.prefixed(broadcastKey(winner)));
 
         for (UUID uuid : getAllParticipants()) {
             Player player = Bukkit.getPlayer(uuid);
@@ -680,20 +678,23 @@ public final class GameManager {
                 continue;
             }
 
+            boolean isHunter = activeHunters.contains(uuid);
+            showEndTitle(player, winner, isHunter);
+
             player.removePotionEffect(PotionEffectType.BLINDNESS);
             player.removePotionEffect(PotionEffectType.SPEED);
             player.removePotionEffect(PotionEffectType.GLOWING);
             player.setCooldown(Material.ENDER_PEARL, 0);
             player.setGameMode(GameMode.SURVIVAL);
             player.getInventory().clear();
+            clearBorder(player);
 
             if (restorePlayers) {
                 restoreLocation(player);
             }
         }
 
-        restoreWorldBorder();
-
+        gameBorder = null;
         activeHunters.clear();
         activeHiders.clear();
         foundHiders.clear();
@@ -703,7 +704,35 @@ public final class GameManager {
         gameState = GameState.IDLE;
     }
 
-    /** Renvoie le joueur la ou il etait avant la partie (spawn du monde en secours). */
+    private String broadcastKey(Winner winner) {
+        return switch (winner) {
+            case HUNTERS -> "winner-hunters";
+            case HIDERS -> "winner-hiders";
+            case NONE -> "winner-draw";
+        };
+    }
+
+    /** Titre VICTOIRE / DEFAITE selon le camp du joueur. */
+    private void showEndTitle(Player player, Winner winner, boolean isHunter) {
+        if (winner == Winner.NONE) {
+            player.showTitle(Title.title(
+                messages.component("title-end"),
+                messages.component("subtitle-end"),
+                TITLE_TIMES));
+            return;
+        }
+
+        boolean won = (winner == Winner.HUNTERS) == isHunter;
+        String subtitleKey = (won ? "subtitle-victory-" : "subtitle-defeat-") + (isHunter ? "hunters" : "hiders");
+
+        player.showTitle(Title.title(
+            messages.component(won ? "title-victory" : "title-defeat"),
+            messages.component(subtitleKey, Map.of("found", String.valueOf(foundCount))),
+            TITLE_TIMES));
+
+        player.playSound(won ? WIN_SOUND : LOSE_SOUND);
+    }
+
     private void restoreLocation(Player player) {
         Location target = previousLocations.get(player.getUniqueId());
         if (target == null || target.getWorld() == null) {
@@ -784,7 +813,7 @@ public final class GameManager {
         return plugin.getConfig().getInt(key, defaultValue);
     }
 
-    private void broadcast(String message) {
+    private void broadcast(Component message) {
         Bukkit.getOnlinePlayers().forEach(player -> player.sendMessage(message));
         Bukkit.getConsoleSender().sendMessage(message);
     }

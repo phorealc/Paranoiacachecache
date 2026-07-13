@@ -1,5 +1,6 @@
 package fr.sharkboyph0realc.cache.manager;
 
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -15,14 +16,20 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.logging.Level;
 
+/**
+ * Tout sort en Component Adventure (API native de Paper).
+ * On ne renvoie plus jamais de String coloree : c'est ce qui cassait les couleurs.
+ */
 public final class MessageManager {
 
     private static final String FILE_NAME = "messages.yml";
 
-    /** Format utilise dans messages.yml (&c, &a, ...). */
-    private static final LegacyComponentSerializer AMPERSAND = LegacyComponentSerializer.legacyAmpersand();
-    /** Format reellement interprete par le client Minecraft. */
-    private static final LegacyComponentSerializer SECTION = LegacyComponentSerializer.legacySection();
+    /** Lit les codes '&' du fichier (et les codes hex &#rrggbb). */
+    private static final LegacyComponentSerializer AMPERSAND = LegacyComponentSerializer.builder()
+        .character('&')
+        .hexCharacter('#')
+        .hexColors()
+        .build();
 
     private final JavaPlugin plugin;
     private File file;
@@ -35,7 +42,6 @@ public final class MessageManager {
     public void load() {
         file = new File(plugin.getDataFolder(), FILE_NAME);
         if (!file.exists()) {
-            // Copie le messages.yml du jar (cree aussi le dossier data au besoin).
             plugin.saveResource(FILE_NAME, false);
         }
 
@@ -47,10 +53,7 @@ public final class MessageManager {
         load();
     }
 
-    /**
-     * Le fichier du jar sert de valeurs par defaut : une cle ajoutee dans une
-     * future version reste lisible meme si le messages.yml du serveur est ancien.
-     */
+    /** Le messages.yml du jar sert de valeurs par defaut : aucune cle ne peut manquer. */
     private void applyJarDefaults() {
         try (InputStream in = plugin.getResource(FILE_NAME)) {
             if (in == null) {
@@ -65,40 +68,72 @@ public final class MessageManager {
         }
     }
 
-    public String get(String path) {
-        String prefix = colorize(messages.getString("prefix", ""));
-        String raw = messages.getString(path, path);
-        return prefix + colorize(raw);
-    }
+    // ------------------------------------------------------------ lecture
 
-    public String getPlain(String path) {
+    /** Composant sans prefixe (utile pour les titres). */
+    public Component component(String path) {
         return colorize(messages.getString(path, path));
     }
 
+    public Component component(String path, Map<String, String> placeholders) {
+        return colorize(replace(messages.getString(path, path), placeholders));
+    }
+
+    /** Composant prefixe, pour le chat. */
+    public Component prefixed(String path) {
+        return prefix().append(component(path));
+    }
+
+    public Component prefixed(String path, Map<String, String> placeholders) {
+        return prefix().append(component(path, placeholders));
+    }
+
+    public Component prefix() {
+        return colorize(messages.getString("prefix", ""));
+    }
+
+    /** Colore un texte libre ecrit en '&' et le prefixe. */
+    public Component rawPrefixed(String legacyText) {
+        return prefix().append(colorize(legacyText));
+    }
+
+    // ------------------------------------------------------------- envoi
+
     public void send(CommandSender sender, String path) {
-        sender.sendMessage(get(path));
+        sender.sendMessage(prefixed(path));
     }
 
     public void send(CommandSender sender, String path, Map<String, String> placeholders) {
-        sender.sendMessage(format(path, placeholders));
+        sender.sendMessage(prefixed(path, placeholders));
     }
 
-    public String format(String path, Map<String, String> placeholders) {
-        String message = get(path);
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            message = message.replace("%" + entry.getKey() + "%", entry.getValue());
-        }
-        return message;
+    /** Envoie un texte libre en '&' avec le prefixe. */
+    public void sendRaw(CommandSender sender, String legacyText) {
+        sender.sendMessage(rawPrefixed(legacyText));
     }
 
-    /**
-     * Convertit les codes '&' du fichier en codes section.
-     * L'ancienne version re-serialisait en '&' : les joueurs voyaient "&cTexte".
-     */
-    private String colorize(String text) {
-        if (text == null) {
+    /** Envoie un texte libre en '&' sans prefixe (lignes d'aide). */
+    public void sendRawNoPrefix(CommandSender sender, String legacyText) {
+        sender.sendMessage(colorize(legacyText));
+    }
+
+    // ------------------------------------------------------------ interne
+
+    private String replace(String message, Map<String, String> placeholders) {
+        if (message == null) {
             return "";
         }
-        return SECTION.serialize(AMPERSAND.deserialize(text));
+        String result = message;
+        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
+            result = result.replace("%" + entry.getKey() + "%", entry.getValue());
+        }
+        return result;
+    }
+
+    private Component colorize(String text) {
+        if (text == null || text.isEmpty()) {
+            return Component.empty();
+        }
+        return AMPERSAND.deserialize(text);
     }
 }
