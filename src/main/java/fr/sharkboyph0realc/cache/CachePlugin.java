@@ -1,13 +1,12 @@
 package fr.sharkboyph0realc.cache;
 
-import org.bukkit.command.PluginCommand;
-import org.bukkit.plugin.java.JavaPlugin;
-
 import fr.sharkboyph0realc.cache.command.CacheCommand;
 import fr.sharkboyph0realc.cache.listener.GameListener;
 import fr.sharkboyph0realc.cache.manager.GameManager;
 import fr.sharkboyph0realc.cache.manager.MapManager;
 import fr.sharkboyph0realc.cache.manager.MessageManager;
+import org.bukkit.command.PluginCommand;
+import org.bukkit.plugin.java.JavaPlugin;
 
 public final class CachePlugin extends JavaPlugin {
 
@@ -43,7 +42,9 @@ public final class CachePlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         if (gameManager != null) {
-            gameManager.reloadRuntimeData();
+            // Nettoie la partie et restaure la worldborder, sans teleporter
+            // les joueurs (le serveur est en train de s'arreter).
+            gameManager.shutdown();
         }
         if (mapManager != null) {
             mapManager.save();

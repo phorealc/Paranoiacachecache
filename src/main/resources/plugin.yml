@@ -1,6 +1,5 @@
 name: cache
 version: '1.0.0'
-api: ['1.21.0']
 main: fr.sharkboyph0realc.cache.CachePlugin
 api-version: '1.21'
 author: sharkboyph0realc

@@ -1,10 +1,21 @@
+# Duree de la phase cachette, en secondes.
 hide-time: 120
+# Duree de la phase recherche, en secondes.
 hunt-time: 600
+# Recharge de la perle infinie du chasseur, en secondes.
 hunter-pearl-cooldown: 30
+# Nombre de perles de fuite donnees a chaque cache (chaque lancer en consomme une).
 player-pearl-uses: 1
+# Intervalle entre deux bips, en secondes.
 beep-delay: 30
-beep-sound: BLOCK_NOTE_BLOCK_PLING
+# Cle du son joue aux chasseurs (format Minecraft).
+# Les anciens noms d'enum (BLOCK_NOTE_BLOCK_PLING) restent acceptes.
+beep-sound: block.note_block.pling
+# Niveau de Speed du chasseur (1 = Speed I).
 hunter-speed: 1
+# Fleches donnees au chasseur.
 hunter-arrows: 20
+# Niveau de Power sur l'arc du chasseur.
 hunter-bow-power: 4
+# Quantite de boeuf cru donnee aux caches.
 raw-beef: 64

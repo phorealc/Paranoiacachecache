@@ -1,6 +1,7 @@
 package fr.sharkboyph0realc.cache.listener;
 
 import fr.sharkboyph0realc.cache.manager.GameManager;
+import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -35,7 +36,7 @@ public final class GameListener implements Listener {
     public void onRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
         if (gameManager.isFoundHider(player.getUniqueId())) {
-            player.setGameMode(org.bukkit.GameMode.SPECTATOR);
+            player.setGameMode(GameMode.SPECTATOR);
         }
     }
 
@@ -53,15 +54,16 @@ public final class GameListener implements Listener {
         Player player = event.getPlayer();
 
         if (gameManager.isHunter(player.getUniqueId())) {
-            boolean allowed = gameManager.onHunterPearlPreUse(player);
-            if (!allowed) {
+            if (!gameManager.onHunterPearlPreUse(player)) {
                 event.setCancelled(true);
             }
             return;
         }
 
-        if (gameManager.isHider(player.getUniqueId()) && gameManager.isTaggedHiderPearl(item)) {
-            gameManager.onHiderPearlUse(player);
+        // Perle de fuite : uniquement pendant la phase cachette, le stock est
+        // consomme normalement par le jeu (plus de suppression du reste du stack).
+        if (gameManager.isHider(player.getUniqueId()) && !gameManager.onHiderPearlPreUse(player)) {
+            event.setCancelled(true);
         }
     }
 

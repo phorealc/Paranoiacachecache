@@ -1,18 +1,28 @@
 package fr.sharkboyph0realc.cache.manager;
 
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-
-import java.util.logging.Level;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.logging.Level;
 
 public final class MessageManager {
+
+    private static final String FILE_NAME = "messages.yml";
+
+    /** Format utilise dans messages.yml (&c, &a, ...). */
+    private static final LegacyComponentSerializer AMPERSAND = LegacyComponentSerializer.legacyAmpersand();
+    /** Format reellement interprete par le client Minecraft. */
+    private static final LegacyComponentSerializer SECTION = LegacyComponentSerializer.legacySection();
 
     private final JavaPlugin plugin;
     private File file;
@@ -23,61 +33,36 @@ public final class MessageManager {
     }
 
     public void load() {
-        if (!plugin.getDataFolder().exists() && !plugin.getDataFolder().mkdirs()) {
-            plugin.getLogger().warning("Impossible de creer le dossier data du plugin.");
-        }
-
-        file = new File(plugin.getDataFolder(), "messages.yml");
+        file = new File(plugin.getDataFolder(), FILE_NAME);
         if (!file.exists()) {
-            messages = new YamlConfiguration();
-            setDefaults(messages);
-            try {
-                messages.save(file);
-            } catch (IOException ex) {
-                plugin.getLogger().log(Level.SEVERE, "Impossible de sauvegarder messages.yml", ex);
-            }
+            // Copie le messages.yml du jar (cree aussi le dossier data au besoin).
+            plugin.saveResource(FILE_NAME, false);
         }
 
         messages = YamlConfiguration.loadConfiguration(file);
+        applyJarDefaults();
     }
 
     public void reload() {
-        if (file == null) {
-            load();
-            return;
-        }
-        messages = YamlConfiguration.loadConfiguration(file);
+        load();
     }
 
-    private void setDefaults(FileConfiguration cfg) {
-        cfg.set("prefix", "&8[&6Cache&8] &r");
-        cfg.set("no-permission", "&cTu n'as pas la permission.");
-        cfg.set("player-only", "&cCette commande est reservee aux joueurs.");
-        cfg.set("map-created", "&aMap %map% creee.");
-        cfg.set("map-deleted", "&eMap %map% supprimee.");
-        cfg.set("map-selected", "&aMap %map% selectionnee.");
-        cfg.set("map-updated", "&aMap %map% mise a jour.");
-        cfg.set("hunter-added", "&a%player% est maintenant chasseur.");
-        cfg.set("hunters-cleared", "&eListe des chasseurs videe.");
-        cfg.set("game-started", "&aLa partie commence.");
-        cfg.set("game-stopped", "&cLa partie a ete arretee.");
-        cfg.set("winner-hunters", "&6Les chasseurs ont gagne.");
-        cfg.set("winner-hiders", "&aLes joueurs caches ont gagne.");
-        cfg.set("winner-draw", "&eFin de partie.");
-        cfg.set("hider-found", "&c%player% a ete trouve.");
-        cfg.set("time-up-glow", "&eTemps ecoule sans joueur trouve: tout le monde brille pendant 30 secondes.");
-        cfg.set("reloaded", "&aConfiguration rechargee.");
-        cfg.set("invalid-map", "&cMap introuvable.");
-        cfg.set("invalid-player", "&cJoueur introuvable.");
-        cfg.set("invalid-number", "&cValeur numerique invalide.");
-        cfg.set("no-selected-map", "&cAucune map selectionnee.");
-        cfg.set("map-not-ready", "&cLa map selectionnee n'est pas prete (centre/spawn/waiting/border).");
-        cfg.set("state-running", "&cUne partie est deja en cours.");
-        cfg.set("state-idle", "&cAucune partie en cours.");
-        cfg.set("hunter-none", "&cAucun chasseur selectionne.");
-        cfg.set("hider-pearl-used", "&cTa perle de fuite est deja utilisee.");
-        cfg.set("hunter-pearl-cooldown", "&cPerle en recharge: %seconds%s");
-        cfg.set("player-disconnected-found", "&e%player% s'est deconnecte et est compte comme trouve.");
+    /**
+     * Le fichier du jar sert de valeurs par defaut : une cle ajoutee dans une
+     * future version reste lisible meme si le messages.yml du serveur est ancien.
+     */
+    private void applyJarDefaults() {
+        try (InputStream in = plugin.getResource(FILE_NAME)) {
+            if (in == null) {
+                return;
+            }
+            try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+                messages.setDefaults(YamlConfiguration.loadConfiguration(reader));
+                messages.options().copyDefaults(true);
+            }
+        } catch (IOException ex) {
+            plugin.getLogger().log(Level.WARNING, "Impossible de lire les messages par defaut du jar", ex);
+        }
     }
 
     public String get(String path) {
@@ -95,11 +80,7 @@ public final class MessageManager {
     }
 
     public void send(CommandSender sender, String path, Map<String, String> placeholders) {
-        String message = get(path);
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            message = message.replace("%" + entry.getKey() + "%", entry.getValue());
-        }
-        sender.sendMessage(message);
+        sender.sendMessage(format(path, placeholders));
     }
 
     public String format(String path, Map<String, String> placeholders) {
@@ -110,12 +91,14 @@ public final class MessageManager {
         return message;
     }
 
+    /**
+     * Convertit les codes '&' du fichier en codes section.
+     * L'ancienne version re-serialisait en '&' : les joueurs voyaient "&cTexte".
+     */
     private String colorize(String text) {
         if (text == null) {
             return "";
         }
-        return LegacyComponentSerializer.legacyAmpersand().serialize(
-            LegacyComponentSerializer.legacyAmpersand().deserialize(text)
-        );
+        return SECTION.serialize(AMPERSAND.deserialize(text));
     }
 }
