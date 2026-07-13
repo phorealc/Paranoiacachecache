@@ -10,7 +10,7 @@
     <packaging>jar</packaging>
 
     <name>cache</name>
-    <description>Plugin cache-cache pour Paper 1.21.11</description>
+    <description>Plugin cache-cache pour Paper 1.21.1</description>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
