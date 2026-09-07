@@ -70,7 +70,7 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
             }
             case "select" -> {
                 if (args.length < 2) {
-                    sender.sendMessage("/" + label + " select <map>");
+                    messages.sendRawNoPrefix(sender, "&7/" + label + " select <map>");
                     return true;
                 }
                 return handleSelect(sender, args[1]);
@@ -105,9 +105,9 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleHunter(CommandSender sender, String label, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage("/" + label + " chasseur set <joueur>");
-            sender.sendMessage("/" + label + " chasseur clear");
-            sender.sendMessage("/" + label + " chasseur list");
+            messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur set <joueur>");
+            messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur clear");
+            messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur list");
             return true;
         }
 
@@ -115,7 +115,7 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "set", "add" -> {
                 if (args.length < 3) {
-                    sender.sendMessage("/" + label + " chasseur set <joueur>");
+                    messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur set <joueur>");
                     return true;
                 }
 
@@ -140,11 +140,11 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
                     .filter(Objects::nonNull)
                     .map(Player::getName)
                     .collect(Collectors.toSet());
-                sender.sendMessage(messages.getPlain("prefix") + "Chasseurs: " + String.join(", ", hunters));
+                messages.sendRaw(sender, "&7Chasseurs: &f" + String.join(", ", hunters));
                 return true;
             }
             default -> {
-                sender.sendMessage("/" + label + " chasseur set <joueur>");
+                messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur set <joueur>");
                 return true;
             }
         }
@@ -152,8 +152,8 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleTime(CommandSender sender, String label, String[] args) {
         if (args.length < 4 || !"set".equalsIgnoreCase(args[2])) {
-            sender.sendMessage("/" + label + " time hide set <secondes>");
-            sender.sendMessage("/" + label + " time hunt set <secondes>");
+            messages.sendRawNoPrefix(sender, "&7/" + label + " time hide set <secondes>");
+            messages.sendRawNoPrefix(sender, "&7/" + label + " time hunt set <secondes>");
             return true;
         }
 
@@ -172,19 +172,19 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
         if ("hide".equals(phase)) {
             plugin.getConfig().set("hide-time", seconds);
             plugin.saveConfig();
-            sender.sendMessage(messages.getPlain("prefix") + "Hide-time = " + seconds + "s");
+            messages.sendRaw(sender, "&aHide-time = " + seconds + "s");
             return true;
         }
 
         if ("hunt".equals(phase)) {
             plugin.getConfig().set("hunt-time", seconds);
             plugin.saveConfig();
-            sender.sendMessage(messages.getPlain("prefix") + "Hunt-time = " + seconds + "s");
+            messages.sendRaw(sender, "&aHunt-time = " + seconds + "s");
             return true;
         }
 
-        sender.sendMessage("/" + label + " time hide set <secondes>");
-        sender.sendMessage("/" + label + " time hunt set <secondes>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " time hide set <secondes>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " time hunt set <secondes>");
         return true;
     }
 
@@ -198,12 +198,12 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "create" -> {
                 if (args.length < 3) {
-                    sender.sendMessage("/" + label + " map create <nom>");
+                    messages.sendRawNoPrefix(sender, "&7/" + label + " map create <nom>");
                     return true;
                 }
                 String mapName = args[2];
                 if (!mapManager.createMap(mapName)) {
-                    sender.sendMessage(messages.getPlain("prefix") + "Map deja existante.");
+                    messages.sendRaw(sender, "&cMap deja existante.");
                     return true;
                 }
                 messages.send(sender, "map-created", Map.of("map", mapName));
@@ -211,7 +211,7 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
             }
             case "delete" -> {
                 if (args.length < 3) {
-                    sender.sendMessage("/" + label + " map delete <nom>");
+                    messages.sendRawNoPrefix(sender, "&7/" + label + " map delete <nom>");
                     return true;
                 }
                 String mapName = args[2];
@@ -224,7 +224,7 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
             }
             case "list" -> {
                 String list = mapManager.getMaps().stream().map(MapData::getName).sorted().collect(Collectors.joining(", "));
-                sender.sendMessage(messages.getPlain("prefix") + "Maps: " + (list.isEmpty() ? "aucune" : list));
+                messages.sendRaw(sender, "&7Maps: &f" + (list.isEmpty() ? "aucune" : list));
                 return true;
             }
             case "setcenter" -> {
@@ -238,7 +238,7 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
             }
             case "setborder" -> {
                 if (args.length < 4) {
-                    sender.sendMessage("/" + label + " map setborder <nom> <rayon>");
+                    messages.sendRawNoPrefix(sender, "&7/" + label + " map setborder <nom> <rayon>");
                     return true;
                 }
                 String mapName = args[2];
@@ -274,7 +274,7 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
         }
 
         if (args.length < 3) {
-            sender.sendMessage(messages.getPlain("prefix") + "Map requise.");
+            messages.sendRaw(sender, "&cMap requise.");
             return true;
         }
 
@@ -302,27 +302,27 @@ public final class CacheCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender, String label) {
-        sender.sendMessage(messages.getPlain("prefix") + "Commandes:");
-        sender.sendMessage("/" + label + " start");
-        sender.sendMessage("/" + label + " stop");
-        sender.sendMessage("/" + label + " reload");
-        sender.sendMessage("/" + label + " select <map>");
-        sender.sendMessage("/" + label + " chasseur set <joueur>");
-        sender.sendMessage("/" + label + " chasseur clear");
-        sender.sendMessage("/" + label + " time hide set <secondes>");
-        sender.sendMessage("/" + label + " time hunt set <secondes>");
-        sender.sendMessage("/" + label + " map <...>");
+        messages.sendRaw(sender, "&6Commandes:");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " start");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " stop");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " reload");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " select <map>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur set <joueur>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " chasseur clear");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " time hide set <secondes>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " time hunt set <secondes>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map <...>");
     }
 
     private void sendMapHelp(CommandSender sender, String label) {
-        sender.sendMessage(messages.getPlain("prefix") + "Map:");
-        sender.sendMessage("/" + label + " map create <nom>");
-        sender.sendMessage("/" + label + " map delete <nom>");
-        sender.sendMessage("/" + label + " map list");
-        sender.sendMessage("/" + label + " map setcenter <nom>");
-        sender.sendMessage("/" + label + " map setborder <nom> <rayon>");
-        sender.sendMessage("/" + label + " map sethunterspawn <nom>");
-        sender.sendMessage("/" + label + " map setwaiting <nom>");
+        messages.sendRaw(sender, "&6Map:");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map create <nom>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map delete <nom>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map list");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map setcenter <nom>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map setborder <nom> <rayon>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map sethunterspawn <nom>");
+        messages.sendRawNoPrefix(sender, "&7/" + label + " map setwaiting <nom>");
     }
 
     @Override
